@@ -671,6 +671,14 @@ public class MultipleLevelsPlanPanel extends JPanel implements PlanView, Printab
   public float getPrintPreferredScale(Graphics graphics, PageFormat pageFormat) {
     return this.planComponent.getPrintPreferredScale(graphics, pageFormat);
   }
+
+  /**
+   * Returns the level of the plan page printed by the last call to <code>print</code>,
+   * or <code>null</code> if no page was printed or if home doesn't contain any level.
+   */
+  public Level getPrintedLevel() {
+    return this.planComponent.getPrintedLevel();
+  }
   
   /**
    * A dummy label used to track tabs matching levels.

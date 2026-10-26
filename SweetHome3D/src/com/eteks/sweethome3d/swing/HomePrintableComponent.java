@@ -50,6 +50,7 @@ import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.eteks.sweethome3d.model.HomePrint;
 import com.eteks.sweethome3d.model.LengthUnit;
+import com.eteks.sweethome3d.model.Level;
 import com.eteks.sweethome3d.viewcontroller.ContentManager;
 import com.eteks.sweethome3d.viewcontroller.HomeController;
 import com.eteks.sweethome3d.viewcontroller.PlanView;
@@ -213,6 +214,8 @@ public class HomePrintableComponent extends JComponent implements Printable {
     float imageableY = (float)pageFormat.getImageableY();
     float imageableHeight = (float)pageFormat.getImageableHeight();
     String header = null;
+    Object [] variableValues = null;
+    FontMetrics headerFooterFontMetrics = null;
     float  xHeader = 0;
     float  yHeader = 0;
     float  xFixedHeader = 0;
@@ -250,6 +253,7 @@ public class HomePrintableComponent extends JComponent implements Printable {
         || fixedFooterPageLabel != null) {
       if (homePrint != null) {
         FontMetrics fontMetrics = g2D.getFontMetrics(this.headerFooterFont);
+        headerFooterFontMetrics = fontMetrics;
         float headerFooterHeight = fontMetrics.getAscent() + fontMetrics.getDescent() + HEADER_FOOTER_MARGIN;
         
         // Retrieve variable values
@@ -283,7 +287,7 @@ public class HomePrintableComponent extends JComponent implements Printable {
         }
         String homePresentationName = this.controller.getContentManager().getPresentationName(
              homeName, ContentManager.ContentType.SWEET_HOME_3D);
-        Object [] variableValues = new Object [] {
+        variableValues = new Object [] {
             pageNumber, pageCount, planScale, this.printDate, homePresentationName, homeName, levelName};
         
         // Create header text
@@ -344,26 +348,27 @@ public class HomePrintableComponent extends JComponent implements Printable {
     View furnitureView = this.controller.getFurnitureController().getView();
     if (furnitureView != null 
         && (homePrint == null || homePrint.isFurniturePrinted())) {
-      FurnitureTable furnitureTable = null;
-      final FurnitureTable.FurnitureFilter furnitureFilter;
-      if (furnitureView instanceof FurnitureTable
-          && (homePrint == null
-              || homePrint.isPlanPrinted()
-              || homePrint.isView3DPrinted())) {
-        furnitureTable = (FurnitureTable)furnitureView;
-        furnitureFilter = furnitureTable.getFurnitureFilter();
-        furnitureTable.setFurnitureFilter(new FurnitureTable.FurnitureFilter() {
-            public boolean include(Home home, HomePieceOfFurniture piece) {
-              // Print furniture of every viewable level when the plan or the 3D view is printed
-              return (furnitureFilter == null || furnitureFilter.include(home, piece))
-                  && (piece.getLevel() == null || piece.getLevel().isViewable());
-            }
-          });
-      } else {
-        furnitureFilter = null;
-      }
+      FurnitureTable furnitureTable = furnitureView instanceof FurnitureTable
+          ? (FurnitureTable)furnitureView
+          : null;
+      final FurnitureTable.FurnitureFilter furnitureFilter = furnitureTable != null
+          ? furnitureTable.getFurnitureFilter()
+          : null;
+      boolean furnitureFilterChanged = false;
       boolean levelColumnPrinted = false;
       if (furnitureTable != null) {
+        if (homePrint == null
+            || homePrint.isPlanPrinted()
+            || homePrint.isView3DPrinted()) {
+          furnitureTable.setFurnitureFilter(new FurnitureTable.FurnitureFilter() {
+              public boolean include(Home home, HomePieceOfFurniture piece) {
+                // Print furniture of every viewable level when the plan or the 3D view is printed
+                return (furnitureFilter == null || furnitureFilter.include(home, piece))
+                    && (piece.getLevel() == null || piece.getLevel().isViewable());
+              }
+            });
+          furnitureFilterChanged = true;
+        }
         // Add a Level column to printed furniture to distinguish pieces of each level
         levelColumnPrinted = furnitureTable.isLevelColumnPrinted();
         furnitureTable.setLevelColumnPrinted(!this.home.getLevels().isEmpty());
@@ -374,7 +379,9 @@ public class HomePrintableComponent extends JComponent implements Printable {
       } finally {
         if (furnitureTable != null) {
           // Restore previous filter and printed Level column state
-          furnitureTable.setFurnitureFilter(furnitureFilter);
+          if (furnitureFilterChanged) {
+            furnitureTable.setFurnitureFilter(furnitureFilter);
+          }
           furnitureTable.setLevelColumnPrinted(levelColumnPrinted);
         }
       }
@@ -393,6 +400,28 @@ public class HomePrintableComponent extends JComponent implements Printable {
           && !this.printablePages.contains(page)) {
         this.printablePages.add(page);
         this.planPageCount++;
+      }
+      if (pageExists == PAGE_EXISTS 
+          && variableValues != null) {
+        // Update header and footer with the name of the printed level, 
+        // which may be different from the selected level
+        Level printedLevel = null;
+        if (planView instanceof PlanComponent) {
+          printedLevel = ((PlanComponent)planView).getPrintedLevel();
+        } else if (planView instanceof MultipleLevelsPlanPanel) {
+          printedLevel = ((MultipleLevelsPlanPanel)planView).getPrintedLevel();
+        }
+        if (printedLevel != null) {
+          variableValues [6] = printedLevel.getName();
+          if (header != null) {
+            header = Variable.getMessageFormat(homePrint.getHeaderFormat()).format(variableValues).trim();
+            xHeader = ((float)pageFormat.getWidth() - headerFooterFontMetrics.stringWidth(header)) / 2;
+          }
+          if (footer != null) {
+            footer = Variable.getMessageFormat(homePrint.getFooterFormat()).format(variableValues).trim();
+            xFooter = ((float)pageFormat.getWidth() - headerFooterFontMetrics.stringWidth(footer)) / 2;
+          }
+        }
       }
     }
     View view3D = this.controller.getHomeController3D().getView();
